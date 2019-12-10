@@ -1,12 +1,13 @@
 from .Player import Player
 import Pyro4
 def create_response(message="empty", data=None, code=None):
-    return dict(message="Response--" + message + "--End of response", data=data, code=code)
+    return dict(message="Rep:" + message + "!", data=data, code=code)
 
 @Pyro4.behavior(instance_mode="single")
 class Grid:
     def __init__(self):
         self.grid = [[0 for x in range(3)] for y in range(3)]
+
         self.turn_flag = 0
         self.running = False
         self.winner = "Draw"
@@ -29,37 +30,47 @@ class Grid:
         self.spectators.remove(name)
 
     def register_client(self, name: str, role: str):
-        if name in self.spectators:
-            name = name + "_alter"
-        self.spectators.append(name)
         _message = "Connected successfully"
         if role == "1":
             if not self.is_player_full():
                 if len(self.players) == 0:
+                    print("tol")
+                    name = "_plx"+name
                     _symbol = "O"
                     _player = Player(name, _symbol)
                     self.players.append(_player)
                     _message = _message + "--Register Success"
-                    _message = _message + "--You get to move first"
-                    self.currentmv = _symbol
+                    _message = _message + "--You get first turn"
+                    print(self.get_player_names())
                 elif len(self.players) == 1:
+                    print("tolol")
+                    name = "_plo"+name
                     _symbol = "X"
                     _player = Player(name, _symbol)
                     self.players.append(_player)
-                    _message = _message + "--Registered as 'Player' successfully"
-                    _message = _message + "--You get to move second"
+                    _message = _message + "--Register Success"
+                    _message = _message + "--You get second turn"
                 _code = "101"
-                return create_response(_message, None, _code)
+                return create_response(_message, name, _code)
             else:
+                if name in self.spectators:
+                    name = name + "_spec"
+                self.spectators.append(name)
                 _code = "102"
                 _message = _message + "--Registered as 'Spectator' successfully"
-        return create_response(_message, None, _code)
+                return create_response(_message, name, _code)
 
     def player_role(self, name):
         return len([x for x in self.players if x.name == name])
 
     def get_player_index(self, name):
         return next((i for i, item in enumerate(self.players) if item.name == name), -1)
+
+    def get_player_names(self):
+        return [x.name for i,x in enumerate(self.players)]
+
+    def get_symbol(self,index):
+        return self.players[index].symbol
 
     def start_game(self, name):
         if not self.player_role(name):
@@ -73,10 +84,16 @@ class Grid:
         self.winner = "Draw"
         return create_response("Game started, 'Player' who connects first may make their first move")
 
-    def get_cell_value(self, x, y):
+    def get_cell_value(self, y, x):
         return self.grid[y][x]
 
-    def set_cell_value(self, x, y, value):
+    def get_grid(self,y,x):
+        if(self.get_cell_value(y,x)==0):
+            return create_response("Success", '')
+        else:
+            return create_response("Success", self.get_cell_value(y,x))
+
+    def set_cell_value(self, y, x, value):
         self.grid[y][x] = value
 
     def is_grid_full(self):
@@ -92,8 +109,8 @@ class Grid:
                 self.set_cell_value(x, y, 0)
         self.running = False
 
-    def available(self, x, y):
-        if(self.get_cell_value(x,y) != 0):
+    def available(self, y, x):
+        if(self.get_cell_value(y,x) != 0):
             return False
         else:
             return True
@@ -116,31 +133,31 @@ class Grid:
             self.winner = self.grid[1][1]
         return self.winner
 
-
-    def set_grid(self, x, y, player):
-            if player == "X":
-                self.set_cell_value(x, y, "X")
-            elif player == "O":
-                self.set_cell_value(x, y, "O")
+    def get_currentmv(self):
+        return self.currentmv
 
     def nextmv(self):
         if (self.currentmv == 'X'):
             self.currentmv = 'O'
-        else:
+        elif(self.currentmv == 'O'):
             self.currentmv = 'X'
 
     def fill_board(self, name: str, y: int, x: int):
+        _player_index = self.get_player_index(name)
+        print(self.players[_player_index].symbol)
+        print(self.get_player_names())
+        print(self.player_role)
         if not self.player_role(name):
             return create_response("You are not a 'Player'!")
         if not self.running:
             return create_response("Game hasn't started yet!")
-        _player_index = self.get_player_index(name)
         if (self.currentmv != self.players[_player_index].symbol):
-            return create_response("It is not your turn yet!")
-        if not self.available(x, y):
-            return create_response("The spot is already taken!")
-        self.set_cell_value(x,y,self.players[_player_index].symbol)
+            return create_response("It is not your turn! -- "+self.currentmv+"-"+self.players[_player_index].symbol)
+        if not self.available(y, x):
+          return create_response("The spot is not available!")
+        self.set_cell_value(y,x,self.players[_player_index].symbol)
         self.nextmv()
+        self.print_grid()
         if self.checkWinner() == self.players[_player_index].symbol:
             self.clear_grid()
             self.winner = name
@@ -153,3 +170,7 @@ class Grid:
             return create_response("Board is already full!--It's a draw!--Game ended")
 
         return create_response("Made move successfully", self.grid)
+
+    def print_grid(self):
+        for row in self.grid:
+            print(row)
